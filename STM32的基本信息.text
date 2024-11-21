@@ -1,0 +1,317 @@
+## STM32的基本信息
+
+- stm32扮演管理者、控制器的角色
+- ST（品牌）M32（产品类型）F103（产品系列）C8T6（规格型号）
+- 数据手册：类似规格书-给出产品的性能指标和参数
+- 参考手册：类似说明书-交给你芯片怎么用、怎么编程
+
+
+
+## STM32的引脚分布
+
+- 黑色圆点处为1号引脚，逆时针旋转
+
+
+
+## 2-2 新建工程
+
+![image-20241117232608630](C:\Users\泊宁\AppData\Roaming\Typora\typora-user-images\image-20241117232608630.png)
+
+![image-20241117232616517](C:\Users\泊宁\AppData\Roaming\Typora\typora-user-images\image-20241117232616517.png)
+
+
+
+
+
+
+
+## 3-1 GPIO输出
+
+### GPIO位结构
+
+没听懂思密达，没学过数电模电
+
+### GPIO模式
+
+- 浮空输入
+- 上拉输入
+- 下拉输入
+
+### 操作STM32的GPIO步骤
+
+> 1.使用RCC开启GPIO的时钟
+> 2.使用GPIO_Init函数初始化GPIO
+> 3.使用输出或者输入的函数控制GPIO口
+>
+> ```c
+> RCC_AHBPeriphClockCmd(RCC_APB2Periph_GPIOA,ENABLE);//开启GPIO时钟
+> 	GPIO_InitTypeDef GPIO_InitStructure;//定义一个结构体，下面三行为结构体成员
+> 	GPIO_InitStructure.GPIO_Mode =  GPIO_Mode_Out_PP;//推挽输出（四种输出方式）
+> 	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_all;//什么引脚
+> 	GPIO_InitStructure.GPIO_Speed =GPIO_Speed_50MHz;
+> 	GPIO_Init(GPIOA,&GPIO_InitStructure );//&是取地址的符号，这里使用的是地址传递			
+> ```
+
+
+
+## 3-2-1 LED闪烁
+
+![3-1 LED闪烁](D:\32\STM32入门教程资料\程序源码\程序源码\STM32Project-有注释版\1-1 接线图\3-1 LED闪烁.jpg)
+
+- *首先了解操作STM32的GPIO步骤是什么（3-1GPIO输出）*
+	涉及到RCC和GPIO两个外设，所以要去了解这两个外设的库函数
+	在Library中找到rcc.h这个文件，拖到最下面，常用的RCC库函数为692/693/694三行
+
+	> ```c
+	> void RCC_AHBPeriphClockCmd(uint32_t RCC_AHBPeriph, FunctionalState NewState);//RCC_AHB外设时钟控制
+	> void RCC_APB2PeriphClockCmd(uint32_t RCC_APB2Periph, FunctionalState NewState);//RCC_APB2外设时钟控制
+	> void RCC_APB1PeriphClockCmd(uint32_t RCC_APB1Periph, FunctionalState NewState);//RCC_APB1外设时钟控制
+	> ```
+	>
+	> 可以右键跳转到定义里去看具体定义是什么
+	> 第一个参数选择外设，第二个参数使能或失能
+
+	在Library中找到gpio.h这个文件，拖到最下面，常用的GPIO库函数为349-360
+
+	> ```c
+	> void GPIO_DeInit(GPIO_TypeDef* GPIOx);//参数可以写GPIOA、GPIOB等，调用这个函数后，所指定的GPIO外设就会被复位
+	> void GPIO_AFIODeInit(void);//可复位AFIO外设
+	> void GPIO_Init(GPIO_TypeDef* GPIOx, GPIO_InitTypeDef* GPIO_InitStruct);//非常重要！！！用结构体的参数来初始化GPIO口。需要先定义一个结构体变量，再给结构体复制，最后调用这个函数。这个函数内部就会自动读取结构体的值，然后自动把外设的各个参数配置好。用Init来初始化外设
+	> void GPIO_StructInit(GPIO_InitTypeDef* GPIO_InitStruct);//把结构体变量赋一个默认值
+	> //下面四个为GPIO的读取函数
+	> uint8_t GPIO_ReadInputDataBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+	> uint16_t GPIO_ReadInputData(GPIO_TypeDef* GPIOx);
+	> uint8_t GPIO_ReadOutputDataBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+	> uint16_t GPIO_ReadOutputData(GPIO_TypeDef* GPIOx);
+	> //下面四个为GPIO的写入函数
+	> void GPIO_SetBits(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);//可以把指定的端口设置为高电平，两个参数 ，GPIOx和GPIO_Pin。GPIO_Pin_n可以理解为某端口脚在整个端口的位置
+	> void GPIO_ResetBits(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);//可以把指定的端口设置为低电平
+	> void GPIO_WriteBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin, BitAction BitVal);//有三个参数，前两个指定端口，第三个BitVal根据第三个参数的值来设置指定的端口：BIT_RESET：清除端口值，也就是置低电平；Bit_SET:设置端口值，置高电平
+	> void GPIO_Write(GPIO_TypeDef* GPIOx, uint16_t PortVal);//GPIOx选择外设，PortVal可以同时对16个端口进行写入操作
+	> ```
+	>
+	> 最重要的为Init和八个读写函数
+	> 尤其是Init函数非常重要！！！用结构体的参数来初始化GPIO口。需要先定义一个结构体变量，再给结构体复制，最后调用这个函数。这个函数内部就会自动读取结构体的值，然后自动把外设的各个参数配置好。用Init来初始化外设
+	> GPIO_Pin_n可以理解为某端口脚在整个端口的位置
+
+- 
+
+	> ```c
+	> #include "stm32f10x.h"                  // Device header
+	> 
+	> int main(void)
+	> {
+	> 	RCC_AHBPeriphClockCmd(RCC_APB2Periph_GPIOA,ENABLE);
+	> 	GPIO_InitTypeDef GPIO_InitStructure;
+	> 	GPIO_InitStructure.GPIO_Mode =  GPIO_Mode_Out_PP;
+	> 	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;
+	> 	GPIO_InitStructure.GPIO_Speed =GPIO_Speed_50MHz;
+	> 	GPIO_Init(GPIOA,&GPIO_InitStructure );
+	> 	//以上 GPIO的初始化完成了
+	> 	while(1)
+	> 	{
+	> 		
+	> 	}
+	> }
+	> 
+	> ```
+	>
+	> 
+
+
+
+## 3-2-2LED流水灯
+
+## 3-2-3蜂鸣器
+
+注意换成GPIOB后，RCC开启时钟时也和GPIOA不一样了，下面配置端口时更要注意
+
+```c
+#include "stm32f10x.h"                  // Device header
+#include "Delay.h"
+
+int main(void)
+{
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB,ENABLE);
+	
+	GPIO_InitTypeDef GPIO_InitStructure;
+	GPIO_InitStructure.GPIO_Mode =  GPIO_Mode_Out_PP;
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12;
+	GPIO_InitStructure.GPIO_Speed =GPIO_Speed_50MHz;
+	GPIO_Init(GPIOB,&GPIO_InitStructure );
+	//GPIO初始化至此完成
+	
+		/*主循环，循环体内的代码会一直循环执行*/
+	while(1)
+	{
+		GPIO_WriteBit(GPIOB,GPIO_Pin_12,Bit_RESET);//低电平，鸣叫
+		Delay_ms(100);	
+		GPIO_WriteBit(GPIOB,GPIO_Pin_12,Bit_SET);//高电平，停止
+		Delay_ms(100);
+		GPIO_ResetBits(GPIOB, GPIO_Pin_12);		//将PB12引脚设置为低电平，蜂鸣器鸣叫
+		Delay_ms(100);							//延时100ms
+		GPIO_SetBits(GPIOB, GPIO_Pin_12);		//将PB12引脚设置为高电平，蜂鸣器停止
+		Delay_ms(700);
+		//两种方法设置引脚的高低电平
+	}
+}
+
+
+```
+
+
+
+## 3-3GPIO输入
+
+- 按键的抖动，所以要把这个抖动给过滤，加一段延时
+
+![image-20241120000519737](C:\Users\泊宁\AppData\Roaming\Typora\typora-user-images\image-20241120000519737.png)
+
+- 传感器
+
+	依次为：光敏电阻传感器、热敏电阻传感器。对射式红外传感器、反射式红外传感器
+
+	![image-20241120000647994](C:\Users\泊宁\AppData\Roaming\Typora\typora-user-images\image-20241120000647994.png)
+
+![image-20241120000700370](C:\Users\泊宁\AppData\Roaming\Typora\typora-user-images\image-20241120000700370.png)
+
+- 下接按键的方式
+	![image-20241120000924928](C:\Users\泊宁\AppData\Roaming\Typora\typora-user-images\image-20241120000924928.png)
+
+	图一：按下按键引脚为低电平，松手引脚为高电平
+	图二：引脚不会出现悬空状态，此时引脚可以配置为浮空输入或上啦输入。松手引脚为高电平，按下按键引脚接到GND为低电平。
+
+- C语言数据类型
+	![image-20241120001543997](C:\Users\泊宁\AppData\Roaming\Typora\typora-user-images\image-20241120001543997.png)
+	注意16位的是什么，和51有所不同
+
+- C语言宏定义
+	![image-20241120002549732](C:\Users\泊宁\AppData\Roaming\Typora\typora-user-images\image-20241120002549732.png)
+
+	C语言typedef
+	![image-20241120002747846](C:\Users\泊宁\AppData\Roaming\Typora\typora-user-images\image-20241120002747846.png)
+
+	宏定义与typedef的区别：宏定义的新名字在左边，typedef的新名字在右边；宏定义不需要分号，typedef的需要分号；宏定义任何名字都可以换，typedef只能给变量类型换名；typedef给变量命名更保险，因为会检查
+
+- C语言结构体
+	![image-20241120003215003](C:\Users\泊宁\AppData\Roaming\Typora\typora-user-images\image-20241120003215003.png)
+
+	```c
+	//结构体的定义
+	struct{char x;int y;float z;} c;//定义结构体c，包括char型的x，int型的y，float型的z
+	//结构体的引用：结构体名称 . 结构体子项的名称 = 结构体的成员
+	c.x='A';
+	c.y=66;
+	c.z=1.11;
+	
+	//数组的定义与引用
+	int b[5];
+	int b[0]=2;
+	```
+
+	```c
+	typedef struct{
+	    char x;
+	    int y;
+	    float z;
+	}StructName_t;
+	//此时StructName_t代表这个结构体的数据类型了
+	//因为结构体的定义太长了，所以使用typedef将较长的变量类型换个名字；定义结构体时一般变量较多，所以换行写；不要忘记分号
+	StructName_t c;
+	//结构体数据类型 结构体变量的名字
+	c.x='A';
+	```
+
+- C语言枚举
+	![image-20241120005053537](C:\Users\泊宁\AppData\Roaming\Typora\typora-user-images\image-20241120005053537.png)
+
+	```c
+	//将一个枚举用Week_t来代表
+	typedef eum{
+	    monday=1,//注意：枚举用的是逗号，结构体用的是分号
+	    tuesday,//如果后面的数字是递进的话，可以不写
+	    wendesday
+	}Week_t;
+	
+	Week_t week;//一个枚举变量week，枚举是Week_t的内容
+	week=monday;//week=1
+	week=tuesday;//week=2
+	week=8;//此时就会报错，说枚举中混入了其他类型，因为赋值只能按枚举中的定义来
+	```
+
+## 3-4-1按键控制LED
+
+### 模块化编程
+
+- 需要在这个工程上完成LED和按键的驱动代码，但是如果把这两部分驱动代码都混在组函数里，代码乱不易管理也不容易移植。所以对于这种驱动代码，一般把它封装起来，单独放在另外的.c和.h文件里，这就是模块化编程。
+
+### 驱动程序
+
+- 在工程文件夹里新建一个文件夹Hardware，用来存放硬件驱动（LED.h、LED.c用来封装LED的驱动程序，LED.c驱动程序的主体代码，LED.h用来存放驱动程序可以对外提供的函数或变量的声明 
+
+  ```c
+  //LED.c
+  #include "stm32f10x.h"                  // Device header
+  
+  //首先写一个LED初始化函数，里面写的就是打开时钟，配置端口模式这些东西
+  void LED_Init(void)
+  {
+      /*开启时钟*/
+  	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);		//开启GPIOA的时钟
+      /*GPIO初始化*/
+  	GPIO_InitTypeDef GPIO_InitStructure;//定义一个结构体，下面三行是结构体成员
+  	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;//推挽输出
+  	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1 | GPIO_Pin_2;
+  	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  	GPIO_Init(GPIOA, &GPIO_InitStructure);	//&是取地址的符号，这里使用的是地址传递					//将PA1和PA2引脚初始化为推挽输出
+  }
+  ```
+
+  ```c 
+  //LED.h
+  //对模块外部声明，下面这些函数是可以被外部调用的函数。具体内容在LED.c中 
+  #ifndef __LED_H
+  #define __LED_H
+  
+  void LED_Init(void);
+  void LED1_ON(void);
+  void LED1_OFF(void);
+  void LED1_Turn(void);
+  void LED2_ON(void);
+  void LED2_OFF(void);
+  void LED2_Turn(void);
+  
+  #endif
+  
+  ```
+
+  ```c
+  //Key.c
+  
+  ```
+
+  ## OLED
+
+  ### 调试方式
+
+  - 串口调试：串口通信到电脑端
+  - 显示屏调试：显示屏连接到单片机，将调试信息打印在显示屏上
+
+  ### 硬件电路
+
+  ![image-20241121094316137](C:/Users/泊宁/AppData/Roaming/Typora/typora-user-images/image-20241121094316137.png)
+
+  
+
+  ### OLED驱动函数
+
+  ![image-20241121095110930](C:/Users/泊宁/AppData/Roaming/Typora/typora-user-images/image-20241121095110930.png)
+  OLED.h、OLED.c、OLED_Font.h
+  OLED_Font.h存的是OLED的字库数据，想要显示字符图形就要先定义字符的点阵数据
+
+### 接线图
+
+![4-1 OLED显示屏](../../32/STM32入门教程资料/程序源码/程序源码/STM32Project-有注释版/1-1 接线图/4-1 OLED显示屏.jpg)
+
+显示屏的GND要接电源负极，VCC接正极（所以左边的两条线是用电源给PB6和PB7两个引脚上电，电源给OLED供电）
+
